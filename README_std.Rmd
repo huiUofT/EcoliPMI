@@ -1,0 +1,125 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# ECPIN
+
+<!-- badges: start -->
+<!-- badges: end -->
+
+The current project aims to analyze protein-metabolite interaction data
+
+## Installation
+
+You can install the the development version from [GitHub](https://github.com/) with:
+
+``` r
+# install.packages("devtools")
+devtools::install_github("huiUofT/ECPIN")
+```
+## Example
+
+This is a basic example which shows you how to solve a common problem:
+
+Step 1: loading packages
+```{r, message=FALSE, warning=FALSE}
+  rm(list=ls())
+  library(xcms)
+  library(EcoliPMI)
+  library(devtools)
+  library(xlsx)
+  library(ChemmineR)
+  library(rcdk)
+  library(MassSpecWavelet)
+  library(Rcpp)
+  library(RcppArmadillo)
+  library(isopat)
+  library(readxl)
+  library(ggplot2)
+  library(tidyverse)
+  library(dplyr)
+  library(ggrepel)
+  library(openxlsx)
+  #'set up the path
+  path<-getwd()
+  polarity<-1
+  setwd(path)
+```
+
+Step 2: calibrating mass spectra
+```{r, include= FALSE}
+  #setwd('C:/Rprogram/ECPIN')
+  #MassCalibration(polarity)
+```
+
+Step 3: extracting peak features
+```{r, message=FALSE, warning=FALSE}
+  setwd(path)
+
+  #extracting peaks, intensity cutoff is 10^6, ppm = 2.5
+  peaks.raw<-Peakextract(10^5,2.5)
+  
+  #'Extracting differential peaks
+  #'data has to be organized like NR_XX_X, WT_XX_X, NR_DMSO_X
+  Control<-'MeOH'
+  peaks<-LigandFeatureID(peaks.raw,'pos',Control)#This is the function extracting differential peaks compared to controL
+```
+Step 4: identifying primary isotopic peaks, and remove redudant isotopic peaks
+```{r, message=FALSE, warning=FALSE}
+  #2 ppm is the mass tolerance to find isotopic peaks
+  #'0.80 is the correlation coefficient to extract isotopic peaks
+  #'3 is the intensity ratio cutoff between primary and other isotopic peaks
+  peaks.iso<-FindIsotope(peaks,2,0.80,2)
+```
+Step 5: loading database, and do initial searching with exact mass
+```{r, message=FALSE, warning=FALSE}
+  setwd(path)
+  Database<-read_excel("HMDB_CFMID.xlsx")#This is a combined database of TSCA, Tox21 and HMDB
+  peaks.iso$mz<-peaks.iso$mz*(1+0*10^(-6))##simple mass calibration
+  Library<-InitialSearch(peaks.iso,3,polarity,Database)#2ppm mass tolerance
+  
+  #delete redundant peaks
+  mz<-NULL
+  rt<-NULL
+  indexsave<-NULL
+  for (i in 1:nrow(Library)){
+    index<-which(mz==Library$mz[i])
+    if (length(index)==0){#new mz
+      mz<-c(mz,Library$mz[i])
+      rt<-c(rt,Library$rt[i])
+      next
+    }
+    if (Library$rt[i]==rt[index[1]]){#retention time is identical
+      indexsave<-c(indexsave,i)
+      next
+    }
+    mz<-c(mz,Library$mz[i])
+    rt<-c(rt,Library$rt[i])
+  }
+  if (length(indexsave)>0){
+  Library<-Library[-indexsave,]}
+  
+  #'writing the initial searching
+  write.table(Library,file='Metabolites_STD.csv',sep=',',row.names = FALSE)
+```
+Step 6: calculate scores
+```{r, message=FALSE, warning=FALSE}
+  setwd(path)
+  #' the path to save results
+  path<-getwd()
+  Library.score<-ScoreRT(Library,Database)
+  output<-Output(Library.score,-1000)
+  
+  write.table(output,file='Metabolite_final.csv',sep=',',row.names = FALSE)
+```
