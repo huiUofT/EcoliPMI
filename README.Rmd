@@ -11,7 +11,7 @@ devtools::install_github("huiUofT/EcoliPMI")
 ```
 ## Example
 
-This example use BirA as an example:
+This example use BirA and tyrS as an example:
 
 Step 1: loading packages
 ```{r, message=FALSE, warning=FALSE}
@@ -41,6 +41,85 @@ Step 1: loading packages
   #we herein use positive ion mode as an example
   polarity<-1
   setwd(path)
+  
+  data(iso_list)
+iso.otheratom<-rbind(1:6,1:6)###save the isotopic distribution of other atoms
+iso.otheratom[1,1]<-iso_list[4,3]-iso_list[3,3]##mz difference of C
+iso.otheratom[2,1]<-iso_list[4,4]/iso_list[3,4]##relative abundance of C
+iso.otheratom[1,2]<-iso_list[2,3]-iso_list[1,3]##mz difference of H
+iso.otheratom[2,2]<-iso_list[2,4]/iso_list[1,4]##relative abundance of H
+iso.otheratom[1,3]<-iso_list[6,3]-iso_list[5,3]##mz difference of N
+iso.otheratom[2,3]<-iso_list[6,4]/iso_list[5,4]##relative abundance of N
+iso.otheratom[1,4]<-iso_list[9,3]-iso_list[7,3]##mz difference of O
+iso.otheratom[2,4]<-iso_list[9,4]/iso_list[7,4]##relative abundance of O
+iso.otheratom[1,5]<-0##mz difference of P
+iso.otheratom[2,5]<-0##relative abundance of P
+iso.otheratom[1,6]<-iso_list[12,3]-iso_list[10,3]##mz difference of S
+iso.otheratom[2,6]<-iso_list[12,4]/iso_list[10,4]##relative abundance of S
+
+#################Rcpp function to enhance computation efficiency###############
+cppFunction(
+  'NumericMatrix itercal(NumericMatrix numberset, NumericVector mz_list,double ppm, double mz, double mwoffset){
+  NumericMatrix output(500,12);
+  int i1;
+  int i2;
+  int i3;
+  int i4;
+  int i5;
+  int i6;
+  int i7;
+  int i8;
+  int i9;
+  int i10;
+  int i11;
+  int i12; 
+  int kk=0;
+  double temp1;
+  double temp2;
+  double temp3;
+  double temp4;
+  double temp;
+  double value=100;
+  double RDBE;
+  for (i1=numberset(0,0);i1<=numberset(0,1);i1++){
+  for (i2=numberset(1,0);i2<=(numberset(1,1)<(i1*2+3)?numberset(1,1):(i1*2+3));i2++){
+  for (i3=numberset(2,0);i3<=(numberset(2,1)<(i1*1.3)?numberset(2,1):(i1*1.3));i3++){
+  for (i4=numberset(3,0);i4<=(numberset(3,1)<(i1*1.2+2)?numberset(3,1):(i1*1.2+2));i4++){
+  for (i5=numberset(4,0);i5<=(numberset(4,1)<(i1*0.3)?numberset(4,1):(i1*0.3));i5++){
+  for (i6=numberset(5,0);i6<=numberset(5,1);i6++){
+  for (i7=numberset(6,0);i7<=numberset(6,1);i7++){
+  temp1=i1*mz_list[0]+i2*mz_list[1]+i3*mz_list[2]+i4*mz_list[3]+i5*mz_list[4]+i6*mz_list[5]+i7*mz_list[6];
+  if (temp1>(mz+1)){
+  break;}
+  for (i8=numberset(7,0);i8<=numberset(7,1);i8++){
+  temp2=temp1+i8*mz_list[7];
+  if (temp2>(mz+1)){
+  break;}
+  for (i9=numberset(8,0);i9<=numberset(8,1);i9++){
+  temp3=temp2+i9*mz_list[8];
+  if (temp3>(mz+1)){
+  break;}
+  for (i10=numberset(9,0);i10<=numberset(9,1);i10++){
+  temp4=temp3+i10*mz_list[9];
+  if (temp4>(mz+1)){
+  break;}
+  for (i12=0;i12<=1;i12++){
+  for (i11=numberset(10,0);i11<=numberset(10,1);i11++){
+  temp=temp4+i11*mz_list[10]+i12*mwoffset;
+  value=abs(1000000*(mz-temp)/temp);
+  RDBE=i1-0.5/(i2+i7+i8+i9+i10+i11+0.0001)+0.5/(i3+i5+0.5)+1;
+  if (value<ppm&&RDBE>=0&&RDBE<40){
+  NumericVector out=NumericVector::create(i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,i11,value);
+  output.row(kk)=out;
+  kk=kk+1;
+  if (kk>=500){return(output(Range(0,kk-1),Range(0,11)));}
+  }
+  if (temp>(mz+1)){break;}
+  }}}}}}}}}}}}
+  if (kk==0){
+  kk=1;}
+  return(output(Range(0,kk-1),Range(0,11)));
+  }')
 ```
 
 Step 2: calibrating mass spectra using lock MS. This step is to further calibrate the mass spectra to <1.5 ppm. If the instrument was externally calibrated, this step could be skipped.
@@ -57,10 +136,9 @@ Step 3: extracting peak features from untargeted metabolomics data
   peaks.raw<-Peakextract(10^3,2.5)
   
   #---------------------------------------
-  #This step aims to find out the differentiated metabolites by comparing against 
-  #'data has to be organized like NR_XX_X, WT_XX_X, NR_DMSO_X
-  Control<-'MeOH'
-  peaks<-LigandFeatureID(peaks.raw,'neg',Control)#This is the function extracting differential peaks compared to controL
+  #This step aims to find out the differentiated metabolites by comparing against other proteins from the same batch
+  #'data has to be organized like Prot_ionmode_rep
+  peaks<-LigandFeatureID(peaks.raw,5)#5 is fold cutoff; t test is recommended for 3 replicates; Zscore is recommended for 2 replicates.
 ```
 Step 4: identifying primary isotopic peaks, and remove redundant isotopic peaks
 ```{r, message=FALSE, warning=FALSE}
@@ -73,20 +151,24 @@ Step 5: loading database, and do initial searching with MS1
 ```{r, message=FALSE, warning=FALSE}
   setwd(path)
   #----------------
-  #import MS database, HMDB and EcoCyc are both recommended, we herein use ECOCYC   database as an example
-  Database<-read_excel("Ecocyc.xlsx")
+  #import Metabolite database, HMDB and EcoCyc are both recommended, we herein use HMDB database as an example; for E. coli, it would the best to use the EcoCyc database to exclude unrelevant metabolites
+  Database<-read_excel("HMDB_MS2.xlsx")
   
   #--------------------
-  #this is a simple version of mass calibration using a known compound, we assume   that the mass shift is consitent across the whole mass range which is typically   true in positive ion mode
-  peaks.iso$mz<-peaks.iso$mz*(1+0*10^(-6))
+  #this is a simple version of mass calibration using a known compound, we assume   that the mass shift is consistent across the whole mass range which is typically   true in positive ion mode
+  peaks.iso$mz<-peaks.iso$mz*(1-1.5*10^(-6))
   
   #-------------------------------------------
   #database searching, 2 is the ppm mass tolerance for database searching
   #depending on the mass calibration and MS stability, the mass tolerance number    should be revisited accordingly
-  Library<-InitialSearch(peaks.iso,2,polarity,Database)
-  write.table(Library,file='Metabolites.csv',sep=',',row.names = FALSE)
+  Library<-InitialSearch(peaks.iso,2,polarity,Database)#2 is the ppm cutoff
+  write.table(Library,file='PMI_HMDB.csv',sep=',',row.names = FALSE)
 ```
-Step 6: extracting fragments and isotopic peaks
+If MS2 spectra from DIA window is availalbe, or if MS spectral library is available. Please continue to the next steps. Otherwise, the resutls based on MS1 spectra are already available above.
+If you want to use retention time to increase the confidence, please continue.
+
+
+Step 6: extracting fragments and isotopic peaks, when MS2 spectra are available in this case
 ```{r, message=FALSE, warning=FALSE}
   setwd(path)
   
@@ -152,5 +234,5 @@ Step 9: weighted scores
   Target.rt<-ScoreRT(mylib.score,Database)
   output<-Output(Target.rt,-1000)
   
-  write.table(output,file='BirA_results.csv',sep=',',row.names = FALSE)
+  write.table(output,file='PMI_score.csv',sep=',',row.names = FALSE)
  ``` 
