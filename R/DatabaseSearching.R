@@ -563,10 +563,12 @@ Score.ms2<-function(mylib,Cal.Frag,Isotope.Data,mydb,polarity){#using dot produc
     }
     ms2Act$intensity<-ms2Act$intensity*100/max(ms2Act$intensity)##normalization
 
-    ID.temp<-unlist(strsplit(mylib$SMILES[i],';'))
+    #ID.temp<-unlist(strsplit(mylib$SMILES[i],';'))
+    ID.temp<-unlist(strsplit(mylib$ID[i],';'))##go through each matching
     scoresave<-NULL
     for (kk in 1:length(ID.temp)){#preparing reference ms2 spectra from database
-      ID<-which(mydb$SMILES==ID.temp[kk])
+      #ID<-which(mydb$SMILES==ID.temp[kk])
+      ID<-as.numeric(ID.temp[kk])
       if (length(ID)<1){next}
       ID<-ID[1]
       if(polarity==1){
