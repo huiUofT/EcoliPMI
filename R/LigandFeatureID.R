@@ -63,8 +63,8 @@ LigandFeatureID<-function(mydata,Fold_cutoff){
         if (pvalue>0.05){
           next
         }
-        mydata$FOLD<-fold
-        mydata$PVALUE<-pvalue
+        mydata$FOLD[j]<-fold
+        mydata$PVALUE[j]<-pvalue
         index_save<-c(index_save,j)
       }
     }
